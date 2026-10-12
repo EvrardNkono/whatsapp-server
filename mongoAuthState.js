@@ -52,4 +52,14 @@ async function useMongoAuthState() {
 
 const clearAuth = () => Auth.deleteMany({});
 
-module.exports = { useMongoAuthState, clearAuth };
+// Importe une session créée en local (fichiers de useMultiFileAuthState)
+async function importAuth(files) {
+  await Auth.deleteMany({});
+  for (const [name, content] of Object.entries(files)) {
+    if (!name.endsWith('.json')) continue;
+    const id = name.replace(/\.json$/, '').replace(/__/g, '/');
+    await Auth.updateOne({ _id: id }, { data: content }, { upsert: true });
+  }
+}
+
+module.exports = { useMongoAuthState, clearAuth, importAuth };

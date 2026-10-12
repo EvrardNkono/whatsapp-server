@@ -4,7 +4,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const QRCode = require('qrcode');
 const { connect, connection } = require('./sender');
-const { clearAuth } = require('./mongoAuthState');
+const { clearAuth, importAuth } = require('./mongoAuthState');
 const { login, requireAuth } = require('./auth');
 
 for (const v of ['MONGODB_URI', 'WA_PASSWORD', 'WA_JWT_SECRET']) {
@@ -19,6 +19,23 @@ const origins = (process.env.ALLOWED_ORIGINS ||
 ).split(',');
 
 app.use(cors({ origin: origins }));
+
+// Import d'une session créée en local : actif seulement tant que WA_SETUP_KEY existe
+app.post('/import-session', express.json({ limit: '10mb' }), async (req, res) => {
+  const key = process.env.WA_SETUP_KEY;
+  if (!key || req.query.key !== key) return res.status(404).send('Not found');
+  const files = req.body && req.body.files;
+  if (!files || !files['creds.json']) return res.status(400).json({ error: 'creds.json manquant' });
+  try {
+    await importAuth(files);
+    res.json({ ok: true, files: Object.keys(files).length });
+    console.log('Session importée, redémarrage du service');
+    setTimeout(() => process.exit(0), 300); // Render relance le service avec la nouvelle session
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ ok: true, whatsapp: connection.connected }));
