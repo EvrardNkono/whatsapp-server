@@ -36,6 +36,39 @@ app.post('/import-session', express.json({ limit: '10mb' }), async (req, res) =>
   }
 });
 
+// Page d'import (à ouvrir dans le navigateur avec VPN) : active seulement tant que WA_SETUP_KEY existe
+app.get('/import', (req, res) => {
+  const key = process.env.WA_SETUP_KEY;
+  if (!key || req.query.key !== key) return res.status(404).send('Not found');
+  res.set('Cache-Control', 'no-store');
+  res.send(`<meta name="viewport" content="width=device-width,initial-scale=1">
+<body style="font-family:sans-serif;max-width:480px;margin:2em auto;padding:0 1em">
+<h2>Importer la session</h2>
+<p>Choisis le dossier <b>auth_local</b> de ton PC, puis clique sur Envoyer.</p>
+<input id="f" type="file" webkitdirectory multiple>
+<p><button id="go">Envoyer</button></p>
+<pre id="out" style="white-space:pre-wrap"></pre>
+<script>
+document.getElementById('go').onclick = async () => {
+  const out = document.getElementById('out');
+  const list = [...document.getElementById('f').files].filter(f => f.name.endsWith('.json'));
+  if (!list.length) { out.textContent = 'Aucun fichier choisi'; return; }
+  out.textContent = 'Lecture de ' + list.length + ' fichiers...';
+  const files = {};
+  for (const f of list) files[f.name] = await f.text();
+  out.textContent = 'Envoi...';
+  try {
+    const r = await fetch('/import-session' + location.search, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files })
+    });
+    out.textContent = 'Reponse : ' + r.status + ' ' + (await r.text());
+  } catch (e) { out.textContent = 'Erreur : ' + e.message; }
+};
+</script></body>`);
+});
+
 app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ ok: true, whatsapp: connection.connected }));
