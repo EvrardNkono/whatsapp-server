@@ -61,25 +61,38 @@ async function main() {
       });
     });
 
-  await link();
+  // Si une session valide existe déjà dans auth_local, on saute la liaison (pas de nouveau scan)
+  let already = false;
+  try {
+    const c = JSON.parse(fs.readFileSync(path.join(DIR, 'creds.json'), 'utf8'));
+    already = !!c.me;
+  } catch {}
+  if (already) {
+    console.log('Session locale déjà liée : envoi direct vers Render (sans nouveau scan).');
+  } else {
+    await link();
+  }
 
   const files = {};
   for (const f of fs.readdirSync(DIR)) {
     files[f] = fs.readFileSync(path.join(DIR, f), 'utf8');
   }
   if (!files['creds.json']) throw new Error('creds.json introuvable');
-  console.log(`Envoi de ${Object.keys(files).length} fichiers vers Render…`);
+  const body = JSON.stringify({ files });
+  console.log(`Envoi de ${Object.keys(files).length} fichiers (${(body.length / 1048576).toFixed(1)} Mo) vers Render…`);
 
   const r = await fetch(`${url.replace(/\/$/, '')}/import-session?key=${encodeURIComponent(key)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ files }),
+    body,
+    signal: AbortSignal.timeout(180000),
   });
   console.log('Réponse de Render :', r.status, await r.text());
   process.exit(0);
 }
 
 main().catch((e) => {
-  console.error('Erreur :', e.message);
+  console.error('Erreur :', e.message, e.cause ? '| ' + (e.cause.code || e.cause.message) : '');
+  console.error('Si c\'est une erreur réseau : utilise le partage de connexion du téléphone, puis relance la même commande (sans rescanner).');
   process.exit(1);
 });
